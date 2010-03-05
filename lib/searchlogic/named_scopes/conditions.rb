@@ -109,10 +109,10 @@ module Searchlogic
         def create_primary_condition(column, condition)
           column_type = columns_hash[column.to_s].type
           match_keyword = ::ActiveRecord::Base.connection.adapter_name == "PostgreSQL" ? "ILIKE" : "LIKE"
-          
+
           scope_options = case condition.to_s
           when /^equals/
-            scope_options(condition, column_type, lambda { |a| attribute_condition("#{table_name}.#{column}", a) })
+            scope_options(condition, column_type, equals_condition_for(column))
           when /^does_not_equal/
             scope_options(condition, column_type, "#{table_name}.#{column} != ?")
           when /^less_than_or_equal_to/
@@ -146,10 +146,10 @@ module Searchlogic
           when "not_blank"
             {:conditions => "#{table_name}.#{column} != '' AND #{table_name}.#{column} IS NOT NULL"}
           end
-          
+
           named_scope("#{column}_#{condition}".to_sym, scope_options)
         end
-        
+
         # This method helps cut down on defining scope options for conditions that allow *_any or *_all conditions.
         # Kepp in mind that the lambdas get cached in a method, so you want to keep the contents of the lambdas as
         # fast as possible, which is why I didn't do the case statement inside of the lambda.
@@ -160,23 +160,31 @@ module Searchlogic
               return {} if values.empty?
               values.flatten!
               values.collect! { |value| value_with_modifier(value, value_modifier) }
-              
+
               join = $1 == "any" ? " OR " : " AND "
               scope_sql = values.collect { |value| sql.is_a?(Proc) ? sql.call(value) : sql }.join(join)
-              
+
               {:conditions => [scope_sql, *expand_range_bind_variables(values)]}
             }
           else
             searchlogic_lambda(column_type) { |*values|
               values.collect! { |value| value_with_modifier(value, value_modifier) }
-              
+
               scope_sql = sql.is_a?(Proc) ? sql.call(*values) : sql
-              
+
               {:conditions => [scope_sql, *expand_range_bind_variables(values)]}
             }
           end
         end
-        
+
+        def equals_condition_for(column)
+          if Rails::VERSION::MAJOR == 2 && Rails::VERSION::MINOR < 3
+            lambda { |a| attribute_condition("#{table_name}.#{column}", a) }
+          else
+            lambda { |a| "#{table_name}.#{column} #{attribute_condition(a)}" }
+          end
+        end
+
         def value_with_modifier(value, modifier)
           case modifier
           when :like
