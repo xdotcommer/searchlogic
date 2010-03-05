@@ -179,9 +179,9 @@ module Searchlogic
 
         def equals_condition_for(column)
           if Rails::VERSION::MAJOR == 2 && Rails::VERSION::MINOR < 3
-            lambda { |a| attribute_condition("#{table_name}.#{column}", a) }
-          else
             lambda { |a| "#{table_name}.#{column} #{attribute_condition(a)}" }
+          else
+            lambda { |a| attribute_condition("#{table_name}.#{column}", a) }
           end
         end
 
